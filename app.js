@@ -1,89 +1,78 @@
+import { Conversation } from 'https://cdn.jsdelivr.net/npm/@elevenlabs/client/+esm';
 (function () {
     const recentKey = 'sanskritisetu-recent-explorations';
+    const ELEVENLABS_AGENT_ID = 'agent_0501m25x7zpqenc9x04zad4d4ff3'; // <--- Paste your Agent ID here
 
-    function getRecentExplorations() {
-        try {
-            return JSON.parse(localStorage.getItem(recentKey) || '[]');
-        } catch (error) {
-            return [];
-        }
-    }
-
-    function saveRecentExploration(title) {
-        const recent = [title, ...getRecentExplorations().filter(item => item !== title)].slice(0, 4);
-        localStorage.setItem(recentKey, JSON.stringify(recent));
-        renderRecentExplorations();
-    }
-
-    function renderRecentExplorations() {
-        const container = document.getElementById('recentExplorations');
-        const recent = getRecentExplorations();
-        if (!container || !recent.length) return;
-
-        container.hidden = false;
-        container.innerHTML = '<span>Recently explored</span>';
-        recent.forEach(title => {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.textContent = title;
-            button.addEventListener('click', () => {
-                const input = document.getElementById('heritageSearchInput');
-                input.value = title;
-                updateHeritageView(title);
-                document.querySelector('.immersive-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
-            });
-            container.appendChild(button);
-        });
-    }
-
-    function setupGuidePrompts() {
-        document.querySelectorAll('[data-guide-prompt]').forEach(button => {
-            button.addEventListener('click', () => {
-                const input = document.getElementById('userInput');
-                input.value = button.dataset.guidePrompt;
-                input.focus();
-            });
-        });
-    }
+    // ... [keep getRecentExplorations, saveRecentExploration, renderRecentExplorations, setupGuidePrompts as they are] ...
 
     function setupVoiceInput() {
         const button = document.getElementById('voiceInputBtn');
         const input = document.getElementById('userInput');
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!button || !SpeechRecognition) {
-            if (button) button.hidden = true;
-            return;
-        }
 
-        const recognition = new SpeechRecognition();
-        recognition.lang = 'en-IN';
-        recognition.interimResults = false;
+        if (!button) return;
 
-        button.addEventListener('click', () => {
-            recognition.start();
-            button.classList.add('listening');
-            button.setAttribute('aria-label', 'Listening');
-        });
+        let conversation = null;
+        let isConnected = false;
 
-        recognition.addEventListener('result', event => {
-            input.value = event.results[0][0].transcript;
-            input.focus();
-        });
+        button.addEventListener('click', async () => {
+            // Case 1: End active conversation if clicked again
+            if (isConnected && conversation) {
+                await conversation.endSession();
+                return;
+            }
 
-        recognition.addEventListener('end', () => {
-            button.classList.remove('listening');
-            button.setAttribute('aria-label', 'Ask by voice');
+            // Case 2: Start new ElevenLabs conversation
+            try {
+                // Ensure ElevenLabs SDK is loaded
+                
+
+                button.classList.add('listening');
+                button.setAttribute('aria-label', 'Connecting to Voice Agent...');
+
+                // Initialize Conversation Session
+                conversation = await Conversation.startSession({
+                    agentId: ELEVENLABS_AGENT_ID,
+                    onConnect: () => {
+                        isConnected = true;
+                        button.setAttribute('aria-label', 'Listening... Click to stop');
+                    },
+                    onDisconnect: () => {
+                        isConnected = false;
+                        button.classList.remove('listening');
+                        button.setAttribute('aria-label', 'Ask by voice');
+                    },
+                    onMessage: (message) => {
+                        // Optional: Write spoken transcript into the text input box
+                        if (message.source === 'user' && input) {
+                            input.value = message.message;
+                        }
+                    },
+                    onError: (error) => {
+                        console.error('ElevenLabs Error:', error);
+                        isConnected = false;
+                        button.classList.remove('listening');
+                        button.setAttribute('aria-label', 'Ask by voice');
+                    }
+                });
+
+            } catch (err) {
+                console.error("Failed to start voice agent:", err);
+                button.classList.remove('listening');
+                button.setAttribute('aria-label', 'Ask by voice');
+            }
         });
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        setupGuidePrompts();
         setupVoiceInput();
-        renderRecentExplorations();
 
-        document.getElementById('heritageSearchBtn').addEventListener('click', () => {
-            const title = document.getElementById('heritageSearchInput').value.trim();
-            if (title) saveRecentExploration(title);
-        });
+        const searchBtn = document.getElementById('heritageSearchBtn');
+        if (searchBtn) {
+            searchBtn.addEventListener('click', () => {
+                const searchInput = document.getElementById('heritageSearchInput');
+                const title = searchInput ? searchInput.value.trim() : '';
+                if (title) saveRecentExploration(title);
+            });
+        }
     });
 })();
